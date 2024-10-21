@@ -123,6 +123,13 @@ private:
 
   /** \brief Do servoing calculations for direct commands to a joint. */
   bool jointServoCalcs(const control_msgs::JointJog& cmd, trajectory_msgs::JointTrajectory& joint_trajectory);
+  
+  /**
+  * \brief Synchronize the virtual joints to the real robot joints.
+  * 
+  * This function updates the virtual robot state to match the current state of the real robot.
+  */
+  void syncVirtualJointsToReal();
 
   /** \brief Parse the incoming joint msg for the joints of our MoveGroup */
   void updateJoints();
@@ -252,6 +259,9 @@ private:
   const moveit::core::JointModelGroup* joint_model_group_;
 
   moveit::core::RobotStatePtr current_state_;
+  
+  // Variable to store the virtual robot state
+  moveit::core::RobotStatePtr virtual_state_;
 
   // incoming_joint_state_ is the incoming message. It may contain passive joints or other joints we don't care about.
   // (mutex protected below)

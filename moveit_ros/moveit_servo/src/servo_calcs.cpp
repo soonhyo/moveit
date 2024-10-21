@@ -97,6 +97,9 @@ ServoCalcs::ServoCalcs(ros::NodeHandle& nh, ServoParameters& parameters,
   joint_model_group_ = current_state_->getJointModelGroup(parameters_.move_group_name);
   prev_joint_velocity_ = Eigen::ArrayXd::Zero(joint_model_group_->getActiveJointModels().size());
 
+  // Create the virtual state during initialization
+  virtual_state_ = std::make_shared<moveit::core::RobotState>(*current_state_);
+  
   // Subscribe to command topics
   twist_stamped_sub_ =
       nh_.subscribe(parameters_.cartesian_command_in_topic, ROS_QUEUE_SIZE, &ServoCalcs::twistStampedCB, this);
@@ -278,7 +281,7 @@ void ServoCalcs::calculateSingleIteration()
   updateJoints();
 
   // Update from latest state
-  current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
+  // current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
 
   if (latest_twist_stamped_)
     twist_stamped_cmd_ = *latest_twist_stamped_;
@@ -315,6 +318,9 @@ void ServoCalcs::calculateSingleIteration()
   // joints so a jump doesn't occur when restarting
   if (wait_for_servo_commands_ || paused_)
   {
+    // Update the virtual joints to match the real joints
+    // syncVirtualJointsToReal();  
+
     resetLowPassFilters(original_joint_state_);
 
     // Check if there are any new commands with valid timestamp
@@ -429,6 +435,11 @@ void ServoCalcs::calculateSingleIteration()
   // Update the filters if we haven't yet
   if (!updated_filters_)
     resetLowPassFilters(original_joint_state_);
+  
+  // Update the virtual state
+  virtual_state_->setJointGroupPositions(joint_model_group_, internal_joint_state_.position);
+  virtual_state_->setJointGroupVelocities(joint_model_group_, internal_joint_state_.velocity);
+
 }
 // Perform the servoing calculations
 bool ServoCalcs::cartesianServoCalcs(geometry_msgs::TwistStamped& cmd,
@@ -860,13 +871,25 @@ void ServoCalcs::suddenHalt(trajectory_msgs::JointTrajectory& joint_trajectory)
   }
 }
 
+// Synchronize the virtual joints with the real robot state
+void ServoCalcs::syncVirtualJointsToReal()
+{
+  current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
+  virtual_state_->setVariablePositions(current_state_->getVariablePositions());
+  virtual_state_->setVariableVelocities(current_state_->getVariableVelocities());
+}
+
 // Parse the incoming joint msg for the joints of our MoveGroup
 void ServoCalcs::updateJoints()
 {
   // Get the latest joint group positions
-  current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
-  current_state_->copyJointGroupPositions(joint_model_group_, internal_joint_state_.position);
-  current_state_->copyJointGroupVelocities(joint_model_group_, internal_joint_state_.velocity);
+  // current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
+  // current_state_->copyJointGroupPositions(joint_model_group_, internal_joint_state_.position);
+  // current_state_->copyJointGroupVelocities(joint_model_group_, internal_joint_state_.velocity);
+  
+  // Get the latest virtual state
+  virtual_state_->copyJointGroupPositions(joint_model_group_, internal_joint_state_.position);
+  virtual_state_->copyJointGroupVelocities(joint_model_group_, internal_joint_state_.velocity);
 
   // Cache the original joints in case they need to be reset
   original_joint_state_ = internal_joint_state_;
